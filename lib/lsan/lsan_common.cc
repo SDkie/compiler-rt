@@ -144,6 +144,8 @@ static inline bool CanBeAHeapPointer(uptr p) {
 #ifdef __x86_64__
   // Accept only canonical form user-space addresses.
   return ((p >> 47) == 0);
+#elif defined(__mips64)
+  return ((p >> 40) == 0);
 #else
   return true;
 #endif
