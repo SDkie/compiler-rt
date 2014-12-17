@@ -162,6 +162,15 @@ static uptr g_tls_size;
 # define DL_INTERNAL_FUNCTION
 #endif
 
+#if defined(__mips__)
+uptr TlsPreTcbSize() {
+  const uptr kTcbHead = 16;
+  const uptr kTlsTcbAlign = 16;
+  return ((ThreadDescriptorSize() + kTcbHead + kTlsTcbAlign - 1) &
+                                              ~(kTlsTcbAlign -1));
+}
+#endif
+
 void InitTlsSize() {
 #if !SANITIZER_FREEBSD && !SANITIZER_ANDROID
   typedef void (*get_tls_func)(size_t*, size_t*) DL_INTERNAL_FUNCTION;
@@ -174,19 +183,15 @@ void InitTlsSize() {
   size_t tls_size = 0;
   size_t tls_align = 0;
   get_tls(&tls_size, &tls_align);
+#if defined(__mips__)
+  uptr kDlTlsStaticAlign = 16;
+  g_tls_size = ((tls_size + TlsPreTcbSize() + kDlTlsStaticAlign -1)
+                & ~(kDlTlsStaticAlign - 1));
+#else
   g_tls_size = tls_size;
+#endif
 #endif  // !SANITIZER_FREEBSD && !SANITIZER_ANDROID
 }
-
-#if defined(__mips__)
-uptr getTlsPreTcbSize() {
-  const uptr kTcbHead = 16;
-  const uptr kTlsTcbAlign = 16;
-  const uptr kTlsPreTcbSize = (ThreadDescriptorSize() + kTcbHead +
-                               kTlsTcbAlign - 1) & ~(kTlsTcbAlign -1);
-  return kTlsPreTcbSize;
-}
-#endif
 
 #if (defined(__x86_64__) || defined(__i386__) || defined(__mips__)) \
      && SANITIZER_LINUX
@@ -259,7 +264,7 @@ uptr ThreadSelf() {
                 .set mips32r2;\
                 rdhwr %0,$29;\
                 .set\tpop" : "=r" (thread_pointer));
-  descr_addr = thread_pointer - kTlsTcbOffset - getTlsPreTcbSize();
+  descr_addr = thread_pointer - kTlsTcbOffset - TlsPreTcbSize();
 # else
 #  error "unsupported CPU arch"
 # endif
@@ -324,14 +329,8 @@ uptr GetTlsSize() {
   uptr addr, size;
   GetTls(&addr, &size);
   return size;
-#elif defined(__x86_64__) || defined(__mips__)
-  return g_tls_size;
-#elif defined(__mips__)
-  uptr kdl_tls_static_align = 16;
-  return ((g_tls_size + getTlsPreTcbSize() + kdl_tls_static_align -1)
-         & ~(kdl_tls_static_align - 1));
 #else
-#  error "unsupported CPU arch"
+  return g_tls_size;
 #endif
 }
 
